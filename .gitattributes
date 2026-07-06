@@ -1,6 +1,0 @@
-*.rag linguist-detectable=RAG
-*.Vector linguist-detectable=Vector Databases
-*.embd linguist-detectable=Embeddings
-*.py linguist-detectable=python
-*.spark linguist-detectable=PySpark
-*.semanic linguist-detectable=Semantic Search
