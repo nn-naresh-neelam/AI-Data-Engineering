@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Best Fit Facts & Dimensions – Data Modeling (NN_ADMHR)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1f2a37;
+      --muted: #5a6471;
+      --accent: #2b6cb0;
+      --green: #2e8b57;
+      --amber: #e3a602;
+      --codebg: #0b1020;
+      --codetext: #e5e7eb;
+    }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: Arial, Helvetica, sans-serif; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    header { padding: 20px 0 12px; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    section { background: var(--card); border-radius: 8px; padding: 18px 20px; margin: 18px 0; box-shadow: 0 2px 6px rgba(0,0,0,.05); }
+    h2 { margin: 0 0 8px; font-size: 22px; color: #213547; }
+    p{ margin: 6px 0 12px; color: #2a2f3a; }
+    ul { margin: 8px 0 0 20px; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 13px; vertical-align: top; }
+    th { background: #f5f7fb; text-align: left; font-weight: 600; }
+    code { font-family: ui-monospace,SFMono-Regular,Monaco,Consolas,"Liberation Mono"; background: #111827; color: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+    pre { background: var(--codebg); color: var(--codetext); padding: 12px; border-radius: 6px; overflow: auto; border: 1px solid #1f2540; }
+    .mermaid { text-align: left; }
+    .note { font-size: 12px; color: var(--muted); }
+    @media (max-width: 800px){
+      .container { padding: 12px; }
+      table, thead, tbody, th, td, tr { display: block; width: 100%; }
+      tr { margin-bottom: 12px; }
+      td { border: 0; padding: 6px 0; }
+      th { display: block; }
+    }
+  </style>
+  <!-- Mermaid.js for Data Model Diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Best Fit Facts and Dimensions - Data Modeling</h1>
+      <div class="subtitle">
+        Source: NN.ADM_* HR sample schema (Oracle-like) — Tables: COUNTRIES, REGIONS, LOCATIONS, DEPARTMENTS, EMPLOYEES, JOBS, JOB_HISTORY
+      </div>
+    </header>
+
+    <section id="analysis-overview" aria-labelledby="overview-title">
+      <h2 id="overview-title">Analysis Summary</h2>
+      <p>This model presents a best-fit, Snowflake-style data warehouse design for the HR domain using the given NN.ADM_* sample schema. The design creates normalized dimension tables (snowflake-friendly) and a central fact table that captures employee history with measures (salary, commission). The model emphasizes referential integrity via surrogate keys and supports date-bounded history via a DIM_DATE dimension.</p>
+      <p>Key design choices:</p>
+      <ul>
+        <li>Dimensions (dim) derived from NN.ADM_* tables: Region, Country, Location, Department, Job, Employee</li>
+        <li>Fact: FACT_EMPLOYEE_HISTORY capturing employee job history, salary, commission, and the associated dimension lookups</li>
+        <li>DIM_DATE to support START_DATE and END_DATE references from JOB_HISTORY</li>
+        <li>Snowflake-ready SQL blocks for creating and populating the dimensions and fact</li>
+      </ul>
+    </section>
+
+    <section id="dimensions" aria-labelledby="dimensions-title">
+      <h2 id="dimensions-title">Dimension Tables (Snowflake-ready)</h2>
+      <p>Summary of each dimension, its surrogate key, and core attributes:</p>
+      <ul>
+        <li>DIM_REGION: REGION_ID (PK), REGION_NAME</li>
+        <li>DIM_COUNTRY: COUNTRY_ID (PK), COUNTRY_NAME, REGION_ID (FK)</li>
+        <li>DIM_LOCATION: LOCATION_ID (PK), STREET_ADDRESS, CITY, STATE_PROVINCE, POSTAL_CODE, COUNTRY_ID (FK)</li>
+        <li>DIM_DEPARTMENT: DEPARTMENT_ID (PK), DEPARTMENT_NAME, MANAGER_ID, LOCATION_ID (FK)</li>
+        <li>DIM_JOB: JOB_ID (PK), JOB_TITLE, MIN_SALARY, MAX_SALARY</li>
+        <li>DIM_EMPLOYEE: EMPLOYEE_ID (PK), FIRST_NAME, LAST_NAME, EMAIL, PHONE_NUMBER, HIRE_DATE</li>
+        <li>DIM_DATE: DATE_KEY (PK), FULL_DATE, DAY, MONTH, YEAR, QUARTER</li>
+      </ul>
+    </section>
+
+    <section id="facts" aria-labelledby="facts-title">
+      <h2 id="facts-title">Fact Table</h2>
+      <p>FACT_EMPLOYEE_HISTORY captures the historical facts for employee job assignments, including measurable attributes:</p>
+      <ul>
+        <li>FACT_EMPLOYEE_HISTORY: EMPLOYEE_ID, JOB_ID, DEPARTMENT_ID, LOCATION_ID, START_DATE, END_DATE, SALARY, COMMISSION_PCT</li>
+      </ul>
+      <p>Notes: START_DATE and END_DATE reference DIM_DATE via DATE_KEY values; DEPARTMENT_ID links to DIM_DEPARTMENT, which in turn links to DIM_LOCATION, and so on.</p>
+    </section>
+
+    <section id="mapping" aria-labelledby="mapping-title">
+      <h2 id="mapping-title">Column Mapping: Source to Dimensions and Facts</h2>
+      <p>Line-by-line mapping from the source NN.ADM_* tables to the target dimensional model and the fact table.</p>
+
+      <table aria-label="Column mapping from source to dimensions and facts">
+        <thead>
+          <tr>
+            <th>Source Table</th>
+            <th>Source Column</th>
+            <th>Nullable</th>
+            <th>Source Type</th>
+            <th>Target Dimension / Fact</th>
+            <th>Target Column</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>NN.ADM_COUNTRIES</td>
+            <td>COUNTRY_ID</td>
+            <td>NOT NULL</td>
+            <td>CHAR(2)</td>
+            <td>DIM_COUNTRY</td>
+            <td>COUNTRY_ID</td>
+            <td>PK surrogate for country</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_COUNTRIES</td>
+            <td>COUNTRY_NAME</td>
+            <td>NULL</td>
+            <td>VARCHAR2(40)</td>
+            <td>DIM_COUNTRY</td>
+            <td>COUNTRY_NAME</td>
+            <td>Attribute of country</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_COUNTRIES</td>
+            <td>REGION_ID</td>
+            <td>NULL</td>
+            <td>NUMBER</td>
+            <td>DIM_COUNTRY</td>
+            <td>REGION_ID</td>
+            <td>FK to DIM_REGION</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_REGIONS</td>
+            <td>REGION_ID</td>
+            <td>NOT NULL</td>
+            <td>NUMBER</td>
+            <td>DIM_REGION</td>
+            <td>REGION_ID</td>
+            <td>PK surrogate for region</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_REGIONS</td>
+            <td>REGION_NAME</td>
+            <td>NULL</td>
+            <td>VARCHAR2(25)</td>
+            <td>DIM_REGION</td>
+            <td>REGION_NAME</td>
+            <td>Region descriptor</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_LOCATIONS</td>
+            <td>LOCATION_ID</td>
+            <td>NOT NULL</td>
+            <td>NUMBER</td>
+            <td>DIM_LOCATION</td>
+            <td>LOCATION_ID</td>
+            <td>PK</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_LOCATIONS</td>
+            <td>STREET_ADDRESS</td>
+            <td>NULL</td>
+            <td>VARCHAR2(40)</td>
+            <td>DIM_LOCATION</td>
+            <td>STREET_ADDRESS</td>
+            <td>Location detail</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_LOCATIONS</td>
+            <td>CITY</td>
+            <td>NULL</td>
+            <td>VARCHAR2(30)</td>
+            <td>DIM_LOCATION</td>
+            <td>CITY</td>
+            <td>City name</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_LOCATIONS</td>
+            <td>STATE_PROVINCE</td>
+            <td>NULL</td>
+            <td>VARCHAR2(25)</td>
+            <td>DIM_LOCATION</td>
+            <td>STATE_PROVINCE</td>
+            <td>State/Province</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_LOCATIONS</td>
+            <td>COUNTRY_ID</td>
+            <td>NULL</td>
+            <td>CHAR(2)</td>
+            <td>DIM_LOCATION</td>
+            <td>COUNTRY_ID</td>
+            <td>FK to DIM_COUNTRY</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_DEPARTMENTS</td>
+            <td>DEPARTMENT_ID</td>
+            <td>NOT NULL</td>
+            <td>NUMBER(4)</td>
+            <td>DIM_DEPARTMENT</td>
+            <td>DEPARTMENT_ID</td>
+            <td>PK</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_DEPARTMENTS</td>
+            <td>DEPARTMENT_NAME</td>
+            <td>NOT NULL</td>
+            <td>VARCHAR2(30)</td>
+            <td>DIM_DEPARTMENT</td>
+            <td>DEPARTMENT_NAME</td>
+            <td>Name</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_DEPARTMENTS</td>
+            <td>MANAGER_ID</td>
+            <td>NULL</td>
+            <td>NUMBER</td>
+            <td>DIM_DEPARTMENT</td>
+            <td>MANAGER_ID</td>
+            <td>FK to DIM_EMPLOYEE (optional)</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_DEPARTMENTS</td>
+            <td>LOCATION_ID</td>
+            <td>NULL</td>
+            <td>NUMBER</td>
+            <td>DIM_DEPARTMENT</td>
+            <td>LOCATION_ID</td>
+            <td>FK to DIM_LOCATION</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOBS</td>
+            <td>JOB_ID</td>
+            <td>NOT NULL</td>
+            <td>VARCHAR2(10)</td>
+            <td>DIM_JOB</td>
+            <td>JOB_ID</td>
+            <td>PK</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOBS</td>
+            <td>JOB_TITLE</td>
+            <td>NULL</td>
+            <td>VARCHAR2(35)</td>
+            <td>DIM_JOB</td>
+            <td>JOB_TITLE</td>
+            <td>Job title</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOBS</td>
+            <td>MIN_SALARY</td>
+            <td>NULL</td>
+            <td>NUMBER(6)</td>
+            <td>DIM_JOB</td>
+            <td>MIN_SALARY</td>
+            <td>Minimum salary</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOBS</td>
+            <td>MAX_SALARY</td>
+            <td>NULL</td>
+            <td>NUMBER(6)</td>
+            <td>DIM_JOB</td>
+            <td>MAX_SALARY</td>
+            <td>Maximum salary</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>EMPLOYEE_ID</td>
+            <td>NOT NULL</td>
+            <td>NUMBER(6)</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>EMPLOYEE_ID</td>
+            <td>PK</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>FIRST_NAME</td>
+            <td>NULL</td>
+            <td>VARCHAR2(20)</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>FIRST_NAME</td>
+            <td>First name</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>LAST_NAME</td>
+            <td>NOT NULL</td>
+            <td>VARCHAR2(25)</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>LAST_NAME</td>
+            <td>Last name</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>EMAIL</td>
+            <td>NOT NULL</td>
+            <td>VARCHAR2(20)</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>EMAIL</td>
+            <td>Email</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>PHONE_NUMBER</td>
+            <td>NULL</td>
+            <td>VARCHAR2(20)</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>PHONE_NUMBER</td>
+            <td>Phone</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_EMPLOYEES</td>
+            <td>HIRE_DATE</td>
+            <td>NOT NULL</td>
+            <td>DATE</td>
+            <td>DIM_EMPLOYEE</td>
+            <td>HIRE_DATE</td>
+            <td>Hire date</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOB_HISTORY</td>
+            <td>EMPLOYEE_ID</td>
+            <td>NOT NULL</td>
+            <td>NUMBER(6)</td>
+            <td>FACT_EMPLOYEE_HISTORY</td>
+            <td>EMPLOYEE_ID</td>
+            <td>FK to DIM_EMPLOYEE</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOB_HISTORY</td>
+            <td>START_DATE</td>
+            <td>NOT NULL</td>
+            <td>DATE</td>
+            <td>FACT_EMPLOYEE_HISTORY</td>
+            <td>START_DATE</td>
+            <td>FK to DIM_DATE (DATE_KEY)</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOB_HISTORY</td>
+            <td>END_DATE</td>
+            <td>NULL</td>
+            <td>DATE</td>
+            <td>FACT_EMPLOYEE_HISTORY</td>
+            <td>END_DATE</td>
+            <td>FK to DIM_DATE (DATE_KEY)</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOB_HISTORY</td>
+            <td>JOB_ID</td>
+            <td>NOT NULL</td>
+            <td>VARCHAR2(10)</td>
+            <td>FACT_EMPLOYEE_HISTORY</td>
+            <td>JOB_ID</td>
+            <td>FK to DIM_JOB</td>
+          </tr>
+          <tr>
+            <td>NN.ADM_JOB_HISTORY</td>
+            <td>DEPARTMENT_ID</td>
+            <td>NULL</td>
+            <td>NUMBER(4)</td>
+            <td>FACT_EMPLOYEE_HISTORY</td>
+            <td>DEPARTMENT_ID</td>
+            <td>FK to DIM_DEPARTMENT</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">Notes: The LOCATION_ID for a fact row is derived from the DEPARTMENT's LOCATION_ID, establishing the Snowflake design's natural snowflake linkage.</p>
+    </section>
+
+    <section id="sql-population" aria-labelledby="sql-title">
+      <h2 id="sql-title">Snowflake SQL to Populate Dimensions and Facts</h2>
+
+      <h3>1) Create Dimension Tables</h3>
+      <pre><code>-- DIMENSION: Regions
+CREATE OR REPLACE TABLE DIM_REGION (
+  REGION_ID NUMBER PRIMARY KEY,
+  REGION_NAME VARCHAR(25)
+);
+
+-- DIMENSION: Countries
+CREATE OR REPLACE TABLE DIM_COUNTRY (
+  COUNTRY_ID CHAR(2) PRIMARY KEY,
+  COUNTRY_NAME VARCHAR(40),
+  REGION_ID NUMBER,
+  FOREIGN KEY (REGION_ID) REFERENCES DIM_REGION(REGION_ID)
+);
+
+-- DIMENSION: Locations
+CREATE OR REPLACE TABLE DIM_LOCATION (
+  LOCATION_ID NUMBER PRIMARY KEY,
+  STREET_ADDRESS VARCHAR(40),
+  CITY VARCHAR(30),
+  STATE_PROVINCE VARCHAR(25),
+  POSTAL_CODE VARCHAR(12),
+  COUNTRY_ID CHAR(2),
+  FOREIGN KEY (COUNTRY_ID) REFERENCES DIM_COUNTRY(COUNTRY_ID)
+);
+
+-- DIMENSION: Departments
+CREATE OR REPLACE TABLE DIM_DEPARTMENT (
+  DEPARTMENT_ID NUMBER PRIMARY KEY,
+  DEPARTMENT_NAME VARCHAR(30),
+  MANAGER_ID NUMBER,
+  LOCATION_ID NUMBER,
+  FOREIGN KEY (LOCATION_ID) REFERENCES DIM_LOCATION(LOCATION_ID)
+);
+
+-- DIMENSION: Jobs
+CREATE OR REPLACE TABLE DIM_JOB (
+  JOB_ID VARCHAR(10) PRIMARY KEY,
+  JOB_TITLE VARCHAR(35),
+  MIN_SALARY NUMBER(6),
+  MAX_SALARY NUMBER(6)
+);
+
+-- DIMENSION: Employees
+CREATE OR REPLACE TABLE DIM_EMPLOYEE (
+  EMPLOYEE_ID NUMBER(6) PRIMARY KEY,
+  FIRST_NAME VARCHAR(20),
+  LAST_NAME VARCHAR(25),
+  EMAIL VARCHAR(30),
+  PHONE_NUMBER VARCHAR(20),
+  HIRE_DATE DATE
+);
+
+-- DIMENSION: Date
+CREATE OR REPLACE TABLE DIM_DATE (
+  DATE_KEY INT PRIMARY KEY,
+  FULL_DATE DATE,
+  DAY INT,
+  MONTH INT,
+  YEAR INT,
+  QUARTER INT
+);
+</code></pre>
+
+      <h3>2) Create Fact Table</h3>
+      <pre><code>-- FACT: Employee History (measures + FKs to dimensions)
+CREATE OR REPLACE TABLE FACT_EMPLOYEE_HISTORY (
+  EMPLOYEE_ID NUMBER(6),
+  JOB_ID VARCHAR(10),
+  DEPARTMENT_ID NUMBER(4),
+  LOCATION_ID NUMBER(4),
+  START_DATE DATE,
+  END_DATE DATE,
+  SALARY NUMBER(8,2),
+  COMMISSION_PCT NUMBER(2,2)
+);
+</code></pre>
+
+      <h3>3) Populate Dimensions from Source NN.ADM_* Tables</h3>
+      <pre><code>-- Regions
+INSERT INTO DIM_REGION (REGION_ID, REGION_NAME)
+SELECT REGION_ID, REGION_NAME
+FROM NN.ADM_REGIONS;
+
+-- Countries
+INSERT INTO DIM_COUNTRY (COUNTRY_ID, COUNTRY_NAME, REGION_ID)
+SELECT COUNTRY_ID, COUNTRY_NAME, REGION_ID
+FROM NN.ADM_COUNTRIES;
+
+-- Locations
+INSERT INTO DIM_LOCATION (LOCATION_ID, STREET_ADDRESS, CITY, STATE_PROVINCE, POSTAL_CODE, COUNTRY_ID)
+SELECT LOCATION_ID, STREET_ADDRESS, CITY, STATE_PROVINCE, POSTAL_CODE, COUNTRY_ID
+FROM NN.ADM_LOCATIONS;
+
+-- Departments
+INSERT INTO DIM_DEPARTMENT (DEPARTMENT_ID, DEPARTMENT_NAME, MANAGER_ID, LOCATION_ID)
+SELECT DEPARTMENT_ID, DEPARTMENT_NAME, MANAGER_ID, LOCATION_ID
+FROM NN.ADM_DEPARTMENTS;
+
+-- Jobs
+INSERT INTO DIM_JOB (JOB_ID, JOB_TITLE, MIN_SALARY, MAX_SALARY)
+SELECT JOB_ID, JOB_TITLE, MIN_SALARY, MAX_SALARY
+FROM NN.ADM_JOBS;
+
+-- Employees
+INSERT INTO DIM_EMPLOYEE (EMPLOYEE_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE_NUMBER, HIRE_DATE)
+SELECT EMPLOYEE_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE_NUMBER, HIRE_DATE
+FROM NN.ADM_EMPLOYEES;
+</code></pre>
+
+      <h3>4) Populate Date Dimension (range based on source dates)</h3>
+      <pre><code>-- Populate a broad date range (example: 2000-01-01 to 2030-12-31)
+INSERT INTO DIM_DATE (DATE_KEY, FULL_DATE, DAY, MONTH, YEAR, QUARTER)
+SELECT
+  TO_NUMBER(TO_VARCHAR(d, 'YYYYMMDD')) AS DATE_KEY,
+  d AS FULL_DATE,
+  DAY(d) AS DAY,
+  MONTH(d) AS MONTH,
+  YEAR(d) AS YEAR,
+  QUARTER(d) AS QUARTER
+FROM (
+  SELECT DATEADD(DAY, seq4(), '2000-01-01') AS d
+  FROM TABLE(GENERATOR(ROWCOUNT => 40000)) -- ~110 years
+) AS dates
+WHERE d BETWEEN DATE '2000-01-01' AND DATE '2030-12-31';
+</code></pre>
+
+      <h3>5) Populate Facts from Job History (with joins to dims)</h3>
+      <pre><code>-- Fact: Employee History (link to dims via keys)
+INSERT INTO FACT_EMPLOYEE_HISTORY (
+  EMPLOYEE_ID, JOB_ID, DEPARTMENT_ID, LOCATION_ID, START_DATE, END_DATE, SALARY, COMMISSION_PCT
+)
+SELECT
+  jh.EMPLOYEE_ID,
+  jh.JOB_ID,
+  jh.DEPARTMENT_ID,
+  d.LOCATION_ID,
+  jh.START_DATE,
+  jh.END_DATE,
+  jh.SALARY,
+  jh.COMMISSION_PCT
+FROM NN.ADM_JOB_HISTORY jh
+LEFT JOIN NN.ADM_DEPARTMENTS d ON jh.DEPARTMENT_ID = d.DEPARTMENT_ID;
+</code></pre>
+      <p class="note">Notes: START_DATE and END_DATE are expected to map to DIM_DATE.DATE_KEY as a surrogate key for time dimensions in a full implementation. Adjust as needed if you prefer a DATE_KEY derived mapping.</p>
+    </section>
+
+    <section id="model-diagram" aria-labelledby="diagram-title">
+      <h2 id="diagram-title">Data Model Diagram (Mermaid ER)</h2>
+      <div class="mermaid">
+erDiagram
+  REGIONS {
+    NUMBER REGION_ID PK
+    VARCHAR REGION_NAME
+  }
+  COUNTRIES {
+    CHAR(2) COUNTRY_ID PK
+    VARCHAR COUNTRY_NAME
+    NUMBER REGION_ID FK
+  }
+  LOCATIONS {
+    NUMBER LOCATION_ID PK
+    VARCHAR STREET_ADDRESS
+    VARCHAR CITY
+    VARCHAR STATE_PROVINCE
+    VARCHAR POSTAL_CODE
+    CHAR(2) COUNTRY_ID FK
+  }
+  DEPARTMENTS {
+    NUMBER DEPARTMENT_ID PK
+    VARCHAR DEPARTMENT_NAME
+    NUMBER MANAGER_ID
+    NUMBER LOCATION_ID FK
+  }
+  JOBS {
+    VARCHAR(10) JOB_ID PK
+    VARCHAR JOB_TITLE
+    NUMBER MIN_SALARY
+    NUMBER MAX_SALARY
+  }
+  EMPLOYEES {
+    NUMBER EMPLOYEE_ID PK
+    VARCHAR FIRST_NAME
+    VARCHAR LAST_NAME
+    VARCHAR EMAIL
+    VARCHAR PHONE_NUMBER
+    DATE HIRE_DATE
+  }
+  DATE_DIM {
+    INT DATE_KEY PK
+    DATE FULL_DATE
+  }
+  FACT_EMPLOYEE_HISTORY {
+    NUMBER EMPLOYEE_ID
+    VARCHAR(10) JOB_ID
+    NUMBER DEPARTMENT_ID
+    NUMBER LOCATION_ID
+    DATE START_DATE
+    DATE END_DATE
+    NUMBER SALARY
+    NUMBER COMMISSION_PCT
+  }
+
+  REGIONS ||--|| COUNTRIES : contains
+  COUNTRIES ||--|| LOCATIONS : contains
+  LOCATIONS ||--|| DEPARTMENTS : hosts
+  DEPARTMENTS ||--|| JOBS : has
+  EMPLOYEES ||--|| FACT_EMPLOYEE_HISTORY : participates
+  JOBS ||--|| FACT_EMPLOYEE_HISTORY : assigned_to
+  DATE_DIM ||--|| FACT_EMPLOYEE_HISTORY : START_DATE
+  DATE_DIM ||--|| FACT_EMPLOYEE_HISTORY : END_DATE
+  DIM         }|..|| REGIONS : region_ref
+  DIM_REGION ||--|| DIM_COUNTRY : region_ref
+  DIM_COUNTRY ||--|| DIM_LOCATION : country_ref
+  DIM_LOCATION ||--|| DIM_DEPARTMENT : location_ref
+  DIM_DEPARTMENT ||--|| DIM_JOB : dept_job_ref
+  DIM_EMPLOYEE ||--|| FACT_EMPLOYEE_HISTORY : employee_ref
+      </div>
+    </section>
+
+    <section id="conclusion" aria-labelledby="conclusion-title">
+      <h2 id="conclusion-title">Notes and Next Steps</h2>
+      <p>What’s next: refine surrogate keys, add a real time/date dimension design (with date_id serving as the natural key for fact rows), consider slowly changing dimensions (SCD) strategies for employee hires, and expand to aggregate tables (e.g., daily payroll, headcount). Validate with real data loads and performance tests.</p>
+    </section>
+  </div>
+</body>
+</html>
